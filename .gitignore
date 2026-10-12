@@ -61,3 +61,6 @@ junit.xml
 *.pyc
 .venv/
 venv/
+
+# fork: downloaded CI installers and install script
+/dist/
