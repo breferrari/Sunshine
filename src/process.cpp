@@ -149,6 +149,49 @@ namespace proc {
     return cmd_path.parent_path();
   }
 
+  void run_display_prepare_cmd(const rtsp_stream::launch_session_t &launch_session) {
+    const auto &cmd = config::video.dd.prepare_cmd;
+    if (cmd.empty()) {
+      return;
+    }
+
+    // A display waking from standby can take a while. Don't let a stuck command block the stream forever
+    constexpr auto timeout = 60s;
+
+    boost::process::v1::environment env = boost::this_process::environment();
+    env["SUNSHINE_CLIENT_NAME"] = launch_session.client_name;
+    env["SUNSHINE_CLIENT_WIDTH"] = std::to_string(launch_session.width);
+    env["SUNSHINE_CLIENT_HEIGHT"] = std::to_string(launch_session.height);
+    env["SUNSHINE_CLIENT_FPS"] = std::to_string(launch_session.fps);
+    env["SUNSHINE_CLIENT_HDR"] = launch_session.enable_hdr ? "true" : "false";
+
+    std::error_code ec;
+    auto working_dir = find_working_directory(cmd, env);
+    BOOST_LOG(info) << "Executing Display Prepare Cmd: ["sv << cmd << ']';
+    auto start = std::chrono::steady_clock::now();
+    auto child = platf::run_command(false, true, cmd, working_dir, env, nullptr, ec, nullptr);
+    if (ec) {
+      BOOST_LOG(warning) << "Couldn't run ["sv << cmd << "]: System: "sv << ec.message();
+      return;
+    }
+
+    // child::wait_for() is deprecated, so poll like terminate_process_group() does
+    while (child.running(ec) && std::chrono::steady_clock::now() - start < timeout) {
+      std::this_thread::sleep_for(100ms);
+    }
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+    if (ec) {
+      BOOST_LOG(warning) << '[' << cmd << "] wait failed with error code ["sv << ec << ']';
+    } else if (child.running(ec)) {
+      BOOST_LOG(warning) << '[' << cmd << "] did not finish within "sv << timeout.count() << " seconds. Configuring the display anyway"sv;
+      child.terminate(ec);
+    } else if (child.exit_code() != 0) {
+      BOOST_LOG(warning) << '[' << cmd << "] exited with code ["sv << child.exit_code() << "] after "sv << elapsed.count() << " ms"sv;
+    } else {
+      BOOST_LOG(info) << "Display Prepare Cmd finished after "sv << elapsed.count() << " ms"sv;
+    }
+  }
+
   int proc_t::execute(int app_id, std::shared_ptr<rtsp_stream::launch_session_t> launch_session) {
     // Ensure starting from a clean slate
     terminate();

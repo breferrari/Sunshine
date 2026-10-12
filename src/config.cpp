@@ -791,7 +791,8 @@ namespace config {
       3s,  // config_revert_delay
       {},  // config_revert_on_disconnect
       {},  // mode_remapping
-      {}  // wa
+      {},  // wa
+      {}  // prepare_cmd
     },  // display_device
 
     0,  // max_bitrate
@@ -1719,6 +1720,7 @@ namespace config {
       int_between_f(vars, "dd_wa_hdr_toggle_delay", value, {0, 3000});
       video.dd.wa.hdr_toggle_delay = std::chrono::milliseconds {value};
     }
+    string_f(vars, "dd_prepare_cmd", video.dd.prepare_cmd);
 
     int_f(vars, "max_bitrate", video.max_bitrate);
     double_between_f(vars, "minimum_fps_target", video.minimum_fps_target, {0.0, 1000.0});

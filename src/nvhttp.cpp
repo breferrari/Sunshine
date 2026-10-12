@@ -1381,6 +1381,9 @@ namespace nvhttp {
       // The display should be restored in case something fails as there are no other sessions.
       revert_display_configuration = true;
 
+      // Let the user wake the display first. A display in standby may fail the mode change below.
+      proc::run_display_prepare_cmd(*launch_session);
+
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
       // change the active displays.
@@ -1493,6 +1496,9 @@ namespace nvhttp {
     const auto launch_session = make_launch_session(host_audio, args);
 
     if (no_active_sessions) {
+      // Let the user wake the display first. A display in standby may fail the mode change below.
+      proc::run_display_prepare_cmd(*launch_session);
+
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
       // change the active displays.

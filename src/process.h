@@ -216,5 +216,16 @@ namespace proc {
    */
   void terminate_process_group(boost::process::v1::child &proc, boost::process::v1::group &group, std::chrono::seconds exit_timeout);
 
+  /**
+   * @brief Run the configured display prepare command and wait for it to finish.
+   *
+   * Called before the display is configured for a stream, so the command can wake a display that
+   * cannot accept a mode change while in standby. The command gets the same `SUNSHINE_CLIENT_*`
+   * variables as the prep commands. Its result is logged and otherwise ignored: the display is
+   * configured either way.
+   * @param launch_session The session the display is configured for.
+   */
+  void run_display_prepare_cmd(const rtsp_stream::launch_session_t &launch_session);
+
   extern proc_t proc;
 }  // namespace proc
