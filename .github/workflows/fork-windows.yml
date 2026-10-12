@@ -1,0 +1,46 @@
+---
+# Builds the Windows installer of this fork, using upstream's Windows job unchanged.
+# The installer is attached to the run as the build-Windows-AMD64 artifact (unsigned).
+name: Fork Windows Build
+permissions: {}
+
+on:
+  push:
+    branches:
+      - 'fork/**'
+  workflow_dispatch:
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Version
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Upstream version this branch is based on
+        id: version
+        run: |
+          tag="$(git describe --tags --abbrev=0 --match 'v*')"
+          echo "version=${tag#v}" >> "${GITHUB_OUTPUT}"
+
+  build-windows:
+    name: Windows
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-windows.yml
+    with:
+      publish_release: 'false'
+      release_commit: ${{ github.sha }}
+      release_version: ${{ needs.version.outputs.version }}
