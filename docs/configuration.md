@@ -1409,6 +1409,35 @@ consent prompt for directory ACLs, so the Web UI shows setup steps for correctin
     </tr>
 </table>
 
+### dd_prepare_cmd
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            A command run before the display is configured for a stream, when a client launches or resumes an app
+            and no other session is active. Sunshine waits for the command to finish, up to 60 seconds, before it
+            changes the display.<br>
+            Use it to wake a display that cannot accept a mode change while in standby, such as a TV, so that the
+            resolution, refresh rate and HDR changes do not leave Windows without an active display. Prep commands
+            run too late for this, because they run after the display has been configured.<br>
+            The command receives the `SUNSHINE_CLIENT_NAME`, `SUNSHINE_CLIENT_WIDTH`, `SUNSHINE_CLIENT_HEIGHT`,
+            `SUNSHINE_CLIENT_FPS` and `SUNSHINE_CLIENT_HDR` environment variables. It runs as the user, like
+            non-elevated prep commands. Its exit code is logged, and the display is configured either way.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}@endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            dd_prepare_cmd = "C:\Program Files\LGTV Companion\LGTV Companion.exe" -streaming_prepare
+            @endcode</td>
+    </tr>
+</table>
+
 ### dd_mode_remapping
 
 <table>
