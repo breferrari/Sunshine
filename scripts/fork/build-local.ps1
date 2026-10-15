@@ -31,12 +31,23 @@ function Invoke-Msys([string]$command) {
 }
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
-if ($Reconfigure -or -not (Test-Path (Join-Path $root 'build\CMakeCache.txt'))) {
+
+# Version like the CI build: the upstream release the branch is based on, plus branch and commit. CMake reads them
+# at configure time, so configure again whenever the commit changed.
+$commit = (git -C $root rev-parse HEAD).Trim()
+$env:BUILD_VERSION = (git -C $root describe --tags --abbrev=0 --match 'v*').Trim().TrimStart('v')
+$env:BRANCH = (git -C $root rev-parse --abbrev-ref HEAD).Trim()
+$env:COMMIT = $commit
+$configured_commit = Join-Path $root 'build\fork-configured-commit.txt'
+$stale = -not (Test-Path $configured_commit) -or (Get-Content $configured_commit -Raw).Trim() -ne $commit
+
+if ($Reconfigure -or $stale -or -not (Test-Path (Join-Path $root 'build\CMakeCache.txt'))) {
     Write-Host 'Configuring'
     Invoke-Msys ('cmake -B build -G Ninja -S . -DBUILD_WERROR=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo ' +
         '-DSUNSHINE_ASSETS_DIR=assets -DSUNSHINE_PUBLISHER_NAME=breferrari ' +
         '-DSUNSHINE_PUBLISHER_WEBSITE=https://app.lizardbyte.dev ' +
         '-DSUNSHINE_PUBLISHER_ISSUE_URL=https://app.lizardbyte.dev/support -DBUILD_DOCS=OFF')
+    Set-Content $configured_commit $commit
 }
 Write-Host 'Building'
 Invoke-Msys 'ninja -C build'
