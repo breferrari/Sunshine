@@ -170,30 +170,39 @@ namespace proc {
 #endif
   }
 
-  void run_display_prepare_cmd(const rtsp_stream::launch_session_t &launch_session) {
-    const auto &cmd = config::video.dd.prepare_cmd;
-    if (cmd.empty()) {
+  void notify_stream_phase(std::string_view phase, const rtsp_stream::launch_session_t *launch_session) {
+    const auto &configured = config::sunshine.stream_notify_cmd;
+    if (configured.empty()) {
       return;
     }
 
+    const bool wait = phase == "prepare"sv;
     // A display waking from standby can take a while. Don't let a stuck command block the stream forever
     constexpr auto timeout = 60s;
 
     boost::process::v1::environment env = boost::this_process::environment();
-    env["SUNSHINE_CLIENT_NAME"] = launch_session.client_name;
-    env["SUNSHINE_CLIENT_WIDTH"] = std::to_string(launch_session.width);
-    env["SUNSHINE_CLIENT_HEIGHT"] = std::to_string(launch_session.height);
-    env["SUNSHINE_CLIENT_FPS"] = std::to_string(launch_session.fps);
-    env["SUNSHINE_CLIENT_HDR"] = launch_session.enable_hdr ? "true" : "false";
+    env["SUNSHINE_STREAM_PHASE"] = std::string {phase};
+    if (launch_session) {
+      env["SUNSHINE_CLIENT_NAME"] = launch_session->client_name;
+      env["SUNSHINE_CLIENT_WIDTH"] = std::to_string(launch_session->width);
+      env["SUNSHINE_CLIENT_HEIGHT"] = std::to_string(launch_session->height);
+      env["SUNSHINE_CLIENT_FPS"] = std::to_string(launch_session->fps);
+      env["SUNSHINE_CLIENT_HDR"] = launch_session->enable_hdr ? "true" : "false";
+    }
 
     std::error_code ec;
+    const auto cmd = configured + " " + std::string {phase};
     const auto command = prepare_command(cmd);
     auto working_dir = find_working_directory(command, env);
-    BOOST_LOG(info) << "Executing Display Prepare Cmd: ["sv << cmd << ']';
-    auto start = std::chrono::steady_clock::now();
+    BOOST_LOG(info) << "Stream notification ["sv << phase << "]: ["sv << cmd << ']';
+    const auto start = std::chrono::steady_clock::now();
     auto child = platf::run_command(false, true, command, working_dir, env, nullptr, ec, nullptr);
     if (ec) {
       BOOST_LOG(warning) << "Couldn't run ["sv << cmd << "]: System: "sv << ec.message();
+      return;
+    }
+    if (!wait) {
+      child.detach();
       return;
     }
 
@@ -201,7 +210,7 @@ namespace proc {
     while (child.running(ec) && std::chrono::steady_clock::now() - start < timeout) {
       std::this_thread::sleep_for(100ms);
     }
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
     if (ec) {
       BOOST_LOG(warning) << '[' << cmd << "] wait failed with error code ["sv << ec << ']';
     } else if (child.running(ec)) {
@@ -210,7 +219,7 @@ namespace proc {
     } else if (child.exit_code() != 0) {
       BOOST_LOG(warning) << '[' << cmd << "] exited with code ["sv << child.exit_code() << "] after "sv << elapsed.count() << " ms"sv;
     } else {
-      BOOST_LOG(info) << "Display Prepare Cmd finished after "sv << elapsed.count() << " ms"sv;
+      BOOST_LOG(info) << "Stream notification [prepare] finished after "sv << elapsed.count() << " ms"sv;
     }
   }
 

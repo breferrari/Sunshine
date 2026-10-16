@@ -999,6 +999,17 @@ namespace platf {
 
   void enable_mouse_keys();
 
+#ifdef _WIN32
+  /**
+   * @brief Turn on displays that Windows has turned off, and wait until they can be captured.
+   *
+   * A display that is turned on is in a mode change for a moment, and capturing it fails meanwhile.
+   * @param timeout How long to wait at most.
+   * @return True when the displays are on and can be captured.
+   */
+  bool prepare_displays_for_capture(std::chrono::milliseconds timeout);
+#endif
+
   // Allow OS-specific actions to be taken to prepare for streaming
   void streaming_will_start();
   void streaming_will_stop();

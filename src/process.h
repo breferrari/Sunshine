@@ -243,15 +243,15 @@ namespace proc {
   void terminate_process_group(boost::process::v1::child &child_process, boost::process::v1::group &group, std::chrono::seconds exit_timeout);
 
   /**
-   * @brief Run the configured display prepare command and wait for it to finish.
+   * @brief Run the stream notification command for a phase of the stream.
    *
-   * Called before the display is configured for a stream, so the command can wake a display that
-   * cannot accept a mode change while in standby. The command gets the same `SUNSHINE_CLIENT_*`
-   * variables as the prep commands. Its result is logged and otherwise ignored: the display is
-   * configured either way.
-   * @param launch_session The session the display is configured for.
+   * The phase is appended to `stream_notify_cmd` as the last argument. Only `prepare` is waited for (up to
+   * 60 seconds), because it runs before the display is configured; the other phases do not delay anything.
+   * The result is logged and otherwise ignored.
+   * @param phase One of `prepare`, `started`, `ended` or `released`.
+   * @param launch_session The session that is being prepared, for the `SUNSHINE_CLIENT_*` variables (`prepare` only).
    */
-  void run_display_prepare_cmd(const rtsp_stream::launch_session_t &launch_session);
+  void notify_stream_phase(std::string_view phase, const rtsp_stream::launch_session_t *launch_session = nullptr);
 
   extern proc_t proc;
 }  // namespace proc

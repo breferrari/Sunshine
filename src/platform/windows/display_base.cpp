@@ -5,6 +5,9 @@
 // standard includes
 #include <array>
 #include <cmath>
+#include <condition_variable>
+#include <mutex>
+#include <optional>
 #include <thread>
 #include <utility>
 
@@ -50,6 +53,9 @@ using D3DKMT_GPU_PREFERENCE_QUERY_STATE = _D3DKMT_GPU_PREFERENCE_QUERY_STATE;  /
 #include "src/logging.h"
 #include "src/platform/common.h"
 #include "src/video.h"
+
+// needs windows.h first
+#include <powersetting.h>
 
 namespace platf {
   using namespace std::literals;
@@ -1159,5 +1165,151 @@ namespace platf {
       // The DXGI factory from last time is still current, so no encoder changes have occurred.
       return false;
     }
+  }
+  namespace {
+    /**
+     * @brief Windows' DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, which the MinGW headers do not declare.
+     */
+    struct device_notify_subscribe_parameters_t {
+      ULONG(CALLBACK *callback)(PVOID context, ULONG type, PVOID setting);  ///< Called for each power setting change.
+      PVOID context;  ///< Passed to the callback.
+    };
+
+    constexpr DWORD device_notify_callback = 2;  ///< Windows' DEVICE_NOTIFY_CALLBACK.
+
+    /**
+     * @brief GUID_CONSOLE_DISPLAY_STATE, defined here so it does not depend on how the SDK headers define GUIDs.
+     */
+    constexpr GUID console_display_state_guid {0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+
+    /**
+     * @brief Console display state reported by Windows: 0 off, 1 on, 2 dimmed.
+     */
+    struct console_display_state_t {
+      std::mutex mutex;  ///< Guards state.
+      std::condition_variable changed;  ///< Signalled on each report.
+      std::optional<DWORD> state;  ///< Last reported state.
+    };
+
+    ULONG CALLBACK on_console_display_state(PVOID context, ULONG type, PVOID setting) {
+      if (type == PBT_POWERSETTINGCHANGE && setting) {
+        const auto *broadcast = static_cast<const POWERBROADCAST_SETTING *>(setting);
+        if (IsEqualGUID(broadcast->PowerSetting, console_display_state_guid) && broadcast->DataLength >= sizeof(DWORD)) {
+          auto *display_state = static_cast<console_display_state_t *>(context);
+          std::lock_guard lock {display_state->mutex};
+          display_state->state = *reinterpret_cast<const DWORD *>(broadcast->Data);
+          display_state->changed.notify_all();
+        }
+      }
+      return ERROR_SUCCESS;
+    }
+
+    /**
+     * @brief Whether Desktop Duplication can capture an output attached to the desktop right now.
+     *
+     * Quiet version of dxgi::test_dxgi_duplication(): it is polled while a display turns on, when failures are expected.
+     */
+    bool any_output_capturable() {
+      dxgi::factory1_t factory;
+      if (FAILED(CreateDXGIFactory1(IID_IDXGIFactory1, (void **) &factory))) {
+        return false;
+      }
+
+      dxgi::adapter_t::pointer adapter_p;
+      for (int x = 0; factory->EnumAdapters1(x, &adapter_p) != DXGI_ERROR_NOT_FOUND; ++x) {
+        dxgi::adapter_t adapter {adapter_p};
+        dxgi::output_t::pointer output_p;
+        for (int y = 0; adapter->EnumOutputs(y, &output_p) != DXGI_ERROR_NOT_FOUND; ++y) {
+          dxgi::output_t output {output_p};
+          DXGI_OUTPUT_DESC desc;
+          if (FAILED(output->GetDesc(&desc)) || !desc.AttachedToDesktop) {
+            continue;
+          }
+
+          dxgi::device_t device;
+          if (FAILED(D3D11CreateDevice(adapter.get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, dxgi::D3D11_CREATE_DEVICE_FLAGS, nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, nullptr))) {
+            continue;
+          }
+          dxgi::output1_t output1;
+          if (FAILED(output->QueryInterface(IID_IDXGIOutput1, (void **) &output1))) {
+            continue;
+          }
+          dxgi::dup_t dup;
+          if (SUCCEEDED(output1->DuplicateOutput((IUnknown *) device.get(), &dup))) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+  }  // namespace
+
+  bool prepare_displays_for_capture(std::chrono::milliseconds timeout) {
+    const auto start = std::chrono::steady_clock::now();
+    const auto deadline = start + timeout;
+    const auto elapsed_ms = [&start]() {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+    };
+
+    // Windows reports the current console display state right after subscribing, and every change after that
+    console_display_state_t display_state;
+    device_notify_subscribe_parameters_t parameters {on_console_display_state, &display_state};
+    HPOWERNOTIFY registration = nullptr;
+    if (PowerSettingRegisterNotification(&console_display_state_guid, device_notify_callback, &parameters, &registration) != ERROR_SUCCESS) {
+      BOOST_LOG(warning) << "Couldn't subscribe to the display power state. Not waiting for the displays"sv;
+      return false;
+    }
+    auto unregister = util::fail_guard([&registration]() {
+      PowerSettingUnregisterNotification(registration);
+    });
+
+    std::unique_lock lock {display_state.mutex};
+    display_state.changed.wait_for(lock, 500ms, [&display_state]() {
+      return display_state.state.has_value();
+    });
+    if (display_state.state == 1u) {
+      BOOST_LOG(info) << "Displays are on"sv;
+      return true;
+    }
+
+    BOOST_LOG(info) << "Displays are off (state "sv << (display_state.state ? std::to_string(*display_state.state) : "unknown"s) << "). Turning them on before configuring the display"sv;
+    lock.unlock();
+    SetThreadExecutionState(ES_DISPLAY_REQUIRED);
+    lock.lock();
+    if (!display_state.changed.wait_for(lock, 1s, [&display_state]() {
+          return display_state.state == 1u;
+        })) {
+      // An execution state request does not turn on displays turned off with SC_MONITORPOWER: send input too
+      lock.unlock();
+      syncThreadDesktop();
+      INPUT input {};
+      input.type = INPUT_MOUSE;
+      input.mi.dwFlags = MOUSEEVENTF_MOVE;
+      SendInput(1, &input, sizeof(INPUT));
+      BOOST_LOG(info) << "Displays still off after "sv << elapsed_ms() << " ms. Sent input to turn them on"sv;
+      lock.lock();
+      if (!display_state.changed.wait_until(lock, deadline, [&display_state]() {
+            return display_state.state == 1u;
+          })) {
+        BOOST_LOG(warning) << "Displays did not turn on within "sv << timeout.count() << " ms"sv;
+        return false;
+      }
+    }
+    lock.unlock();
+    BOOST_LOG(info) << "Displays turned on after "sv << elapsed_ms() << " ms"sv;
+
+    // A display that was just turned on is in a mode change for a while (DXGI_ERROR_MODE_CHANGE_IN_PROGRESS)
+    syncThreadDesktop();
+    int checks = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
+      ++checks;
+      if (any_output_capturable()) {
+        BOOST_LOG(info) << "Displays ready for capture after "sv << elapsed_ms() << " ms ("sv << checks << " checks)"sv;
+        return true;
+      }
+      std::this_thread::sleep_for(100ms);
+    }
+    BOOST_LOG(warning) << "Displays not ready for capture after "sv << elapsed_ms() << " ms ("sv << checks << " checks)"sv;
+    return false;
   }
 }  // namespace platf

@@ -813,8 +813,7 @@ namespace config {
       3s,  // config_revert_delay
       {},  // config_revert_on_disconnect
       {},  // mode_remapping
-      {},  // wa
-      {}  // prepare_cmd
+      {}  // wa
     },  // display_device
 
     0,  // max_bitrate
@@ -910,6 +909,7 @@ namespace config {
     false,  // notify_pre_releases
     true,  // system_tray
     {},  // prep commands
+    {},  // stream_notify_cmd
     {},  // csrf_allowed_origins
   };
 
@@ -1753,7 +1753,6 @@ namespace config {
       int_between_f(vars, "dd_wa_hdr_toggle_delay", value, {0, 3000});
       video.dd.wa.hdr_toggle_delay = std::chrono::milliseconds {value};
     }
-    string_f(vars, "dd_prepare_cmd", video.dd.prepare_cmd);
 
     int_f(vars, "max_bitrate", video.max_bitrate);
     double_between_f(vars, "minimum_fps_target", video.minimum_fps_target, {0.0, 1000.0});
@@ -1770,6 +1769,7 @@ namespace config {
 
     string_f(vars, "external_ip", nvhttp.external_ip);
     list_prep_cmd_f(vars, "global_prep_cmd", config::sunshine.prep_cmds);
+    string_f(vars, "stream_notify_cmd", config::sunshine.stream_notify_cmd);
 
     string_f(vars, "audio_sink", audio.sink);
     string_f(vars, "virtual_sink", audio.virtual_sink);

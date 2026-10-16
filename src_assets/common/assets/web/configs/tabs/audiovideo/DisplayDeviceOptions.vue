@@ -168,18 +168,6 @@ function addRemappingEntry() {
                 ></Checkbox>
               </div>
 
-              <!-- Display prepare command -->
-              <div class="mb-3">
-                <label for="dd_prepare_cmd" class="form-label">
-                  {{ $t('config.dd_prepare_cmd') }}
-                </label>
-                <input type="text" class="form-control monospace" id="dd_prepare_cmd" placeholder=""
-                       v-model="config.dd_prepare_cmd" />
-                <div class="form-text">
-                  {{ $t('config.dd_prepare_cmd_desc') }}
-                </div>
-              </div>
-
               <!-- Display mode remapping -->
               <div class="mb-3" v-if="canBeRemapped()">
                 <label for="dd_mode_remapping" class="form-label">

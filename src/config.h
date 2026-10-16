@@ -224,7 +224,6 @@ namespace config {
       bool config_revert_on_disconnect;  ///< Specify whether to revert display configuration on client disconnect.
       mode_remapping_t mode_remapping;  ///< Display mode remapping rules grouped by automatic selection mode.
       workarounds_t wa;  ///< Display-device compatibility workarounds.
-      std::string prepare_cmd;  ///< Command run, and waited for, before the display is configured for a stream.
     };
 
     dd_t dd;  ///< Display-device integration settings.
@@ -402,6 +401,7 @@ namespace config {
     bool notify_pre_releases;  ///< Notify users about pre-release updates.
     bool system_tray;  ///< Enable the system tray integration.
     std::vector<prep_cmd_t> prep_cmds;  ///< Preparation commands executed around application launch.
+    std::string stream_notify_cmd;  ///< Command run at each phase of a stream (prepare, started, ended, released).
 
     // List of allowed origins for CSRF protection (e.g., "https://example.com,https://app.example.com")
     // Comma-separated list of additional origins. Default includes localhost variants and web UI port.

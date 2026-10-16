@@ -135,6 +135,14 @@ function removeCmd(index) {
       </button>
     </div>
 
+    <!-- Stream notification command -->
+    <div class="mb-3">
+      <label for="stream_notify_cmd" class="form-label">{{ $t('config.stream_notify_cmd') }}</label>
+      <input type="text" class="form-control monospace" id="stream_notify_cmd" placeholder=""
+             v-model="config.stream_notify_cmd" />
+      <div class="form-text">{{ $t('config.stream_notify_cmd_desc') }}</div>
+    </div>
+
     <!-- Notify Pre-Releases -->
     <Checkbox class="mb-3"
               id="notify_pre_releases"

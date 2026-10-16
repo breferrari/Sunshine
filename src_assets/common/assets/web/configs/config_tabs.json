@@ -7,6 +7,7 @@
       "sunshine_name": "",
       "min_log_level": 2,
       "global_prep_cmd": [],
+      "stream_notify_cmd": "",
       "notify_pre_releases": "disabled",
       "system_tray": "enabled"
     }
@@ -54,7 +55,6 @@
       "dd_wa_hdr_toggle_delay": 0,
       "dd_config_revert_delay": 3000,
       "dd_config_revert_on_disconnect": "disabled",
-      "dd_prepare_cmd": "",
       "dd_mode_remapping": {
         "mixed": [],
         "resolution_only": [],

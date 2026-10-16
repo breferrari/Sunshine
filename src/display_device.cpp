@@ -23,6 +23,7 @@
 // local includes
 #include "audio.h"
 #include "platform/common.h"
+#include "process.h"
 #include "rtsp.h"
 
 // platform-specific includes
@@ -744,6 +745,8 @@ namespace display_device {
         using enum SettingsManagerInterface::RevertResult;
         if (const auto result {settings_iface.revertSettings()}; result == Ok) {
           stop_token.requestStop();
+          // Fork: tell the stream notification command that the display configuration has been restored
+          proc::notify_stream_phase("released"sv);
           return;
         } else if (result == ApiTemporarilyUnavailable) {
           // Do nothing and retry next time

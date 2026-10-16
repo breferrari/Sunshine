@@ -1424,7 +1424,12 @@ namespace nvhttp {
       revert_display_configuration = true;
 
       // Let the user wake the display first. A display in standby may fail the mode change below.
-      proc::run_display_prepare_cmd(*launch_session);
+      proc::notify_stream_phase("prepare"sv, launch_session.get());
+#ifdef _WIN32
+      // Turn on displays that Windows has turned off and wait until they can be captured. Otherwise the
+      // client's first input turns them on while capture starts, and capture fails during the mode change.
+      platf::prepare_displays_for_capture(10s);
+#endif
 
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
@@ -1539,7 +1544,12 @@ namespace nvhttp {
 
     if (no_active_sessions) {
       // Let the user wake the display first. A display in standby may fail the mode change below.
-      proc::run_display_prepare_cmd(*launch_session);
+      proc::notify_stream_phase("prepare"sv, launch_session.get());
+#ifdef _WIN32
+      // Turn on displays that Windows has turned off and wait until they can be captured. Otherwise the
+      // client's first input turns them on while capture starts, and capture fails during the mode change.
+      platf::prepare_displays_for_capture(10s);
+#endif
 
       // We want to prepare display only if there are no active sessions at
       // the moment. This should be done before probing encoders as it could
