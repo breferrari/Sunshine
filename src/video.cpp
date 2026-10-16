@@ -1594,8 +1594,28 @@ namespace video {
     int display_p = -1;
     refresh_displays(encoder.platform_formats->dev_type, display_names, display_p);
     auto disp = platf::display(encoder.platform_formats->dev_type, display_names[display_p], capture_ctxs.front().config);
+
+    // Fork: the display can be briefly unavailable when the stream starts, for example while Windows powers its
+    // displays back on because the client's first input arrived (DXGI_ERROR_MODE_CHANGE_IN_PROGRESS). Reinitializing
+    // during a stream already retries; retry here too instead of ending the stream on the first failure.
     if (!disp) {
-      return;
+      constexpr auto initial_display_timeout = 10s;
+      const auto start = std::chrono::steady_clock::now();
+      int attempt = 1;
+      while (!disp && capture_ctx_queue->running() && std::chrono::steady_clock::now() - start < initial_display_timeout) {
+        ++attempt;
+        BOOST_LOG(warning) << "Display ["sv << display_names[display_p] << "] is not ready for capture yet. Retrying (attempt "sv << attempt << ")"sv;
+        std::this_thread::sleep_for(500ms);
+        refresh_displays(encoder.platform_formats->dev_type, display_names, display_p);
+        // reset_display() makes two attempts and sleeps between them
+        reset_display(disp, encoder.platform_formats->dev_type, display_names[display_p], capture_ctxs.front().config);
+      }
+      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+      if (!disp) {
+        BOOST_LOG(error) << "Display ["sv << display_names[display_p] << "] did not become ready for capture within "sv << elapsed.count() << " ms ("sv << attempt << " attempts)"sv;
+        return;
+      }
+      BOOST_LOG(info) << "Display ["sv << display_names[display_p] << "] ready for capture after "sv << elapsed.count() << " ms ("sv << attempt << " attempts)"sv;
     }
     display_wp = disp;
 
