@@ -1,9 +1,10 @@
 # Installs the Sunshine fork over the installed Sunshine, keeping the configuration, and sets stream_notify_cmd. Run elevated.
 param([string]$Msi = (Join-Path $PSScriptRoot '..\..\dist\Sunshine-Windows-AMD64-installer.msi'))
 $ErrorActionPreference = 'Stop'
+$Msi     = (Resolve-Path $Msi).Path   # msiexec does not accept relative segments like ..\..
 $config  = 'C:\Program Files\Sunshine\config'
 $backup  = "C:\ProgramData\SunshineBackup\$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-$log     = Join-Path $PSScriptRoot '..\..\dist\sunshine-msi.log'
+$log     = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\dist\sunshine-msi.log'))
 $lgtv    = '"C:\Program Files\LGTV Companion\LGTV Companion.exe"'
 $notify  = "stream_notify_cmd = $lgtv -streaming_event"
 
@@ -31,9 +32,11 @@ if ($restored) { Write-Host "Restored: $($restored -join ', ')" } else { Write-H
 # LGTV Companion follows the stream through stream_notify_cmd. Its older hooks would only duplicate the signals:
 # dd_prepare_cmd (replaced by stream_notify_cmd) and a global prep command made only of LGTV Companion commands.
 $conf = Join-Path $config 'sunshine.conf'
-$lines = @(Get-Content $conf | Where-Object {
-    $_ -notmatch '^\s*(dd_prepare_cmd|stream_notify_cmd)\s*=' -and
-    -not ($_ -match '^\s*global_prep_cmd\s*=' -and ($_ -replace 'LGTV Companion\.exe\\" -streaming_(dis)?connect', '') -notmatch '"(do|undo)":"[^"]')
+$lines = @(Get-Content $conf | Where-Object { $_ -notmatch '^\s*(dd_prepare_cmd|stream_notify_cmd)\s*=' } | ForEach-Object {
+    if ($_ -match '^\s*global_prep_cmd\s*=\s*(.+)$') {
+        $kept = @($Matches[1] | ConvertFrom-Json | Where-Object { "$($_.do) $($_.undo)" -notmatch 'LGTV Companion\.exe"? -streaming_(dis)?connect' })
+        if ($kept.Count -gt 0) { 'global_prep_cmd = ' + (ConvertTo-Json -InputObject $kept -Compress -Depth 4) }
+    } else { $_ }
 }) + $notify
 Set-Content $conf $lines -Encoding utf8NoBOM
 Write-Host "sunshine.conf:"; $lines | ForEach-Object { Write-Host "  $_" }
